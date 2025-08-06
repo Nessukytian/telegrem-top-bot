@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: telegram-top-post-bot
+    env: python
+    plan: free
+    buildCommand: pip install aiogram==3.0.0b7 aiosqlite python-dotenv
+    startCommand: python main.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: OWNER_ID
+        sync: false
