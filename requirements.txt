@@ -3,4 +3,4 @@ aiosqlite
 apscheduler
 pyrogram
 python-dotenv
-aiohttp
+aiohttp==3.9.3
