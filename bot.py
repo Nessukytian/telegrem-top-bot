@@ -8,44 +8,54 @@ router = Router()
 
 @router.message(Command("start"))
 async def start_cmd(message: Message):
-    await message.answer("Привет! Я пересылаю самый залайканный пост из каждого канала. Используй /add_channel.")
+    await message.answer(
+        "Привет! Я каждый день в 19:00 пришлю самый залайканный пост из добавленных каналов.\n"
+        "Чтобы добавить канал, используй:\n"
+        "/add_channel <имя_канала> <ссылка_на_чат>\n"
+        "Чтобы удалить —\n"
+        "/remove_channel <имя_канала>\n"
+        "Список каналов — /list"
+    )
 
 @router.message(Command("add_channel"))
 async def add_cmd(message: Message):
     if message.from_user.id != OWNER_ID:
         return
-    parts = message.text.strip().split()
+    parts = message.text.split()
     if len(parts) != 3:
-        await message.answer("Формат: /add_channel @канал ссылка_на_чат")
-        return
-    _, channel, link = parts
-    await add_channel(message.from_user.id, channel, link)
-    await message.answer(f"Канал {channel} добавлен")
+        return await message.answer("Использование: /add_channel <имя_канала> <ссылка_на_чат>")
+    channel_username = parts[1].lstrip("@")
+    chat_link = parts[2]
+    await add_channel(message.from_user.id, channel_username, chat_link)
+    await message.answer(f"Канал @{channel_username} добавлен с чатом {chat_link}")
 
 @router.message(Command("remove_channel"))
-async def rem_cmd(message: Message):
+async def remove_cmd(message: Message):
     if message.from_user.id != OWNER_ID:
         return
-    parts = message.text.strip().split()
+    parts = message.text.split()
     if len(parts) != 2:
-        await message.answer("Формат: /remove_channel @канал")
-        return
-    _, channel = parts
-    await remove_channel(message.from_user.id, channel)
-    await message.answer(f"Канал {channel} удалён")
+        return await message.answer("Использование: /remove_channel <имя_канала>")
+    channel_username = parts[1].lstrip("@")
+    await remove_channel(message.from_user.id, channel_username)
+    await message.answer(f"Канал @{channel_username} удалён")
 
 @router.message(Command("list"))
 async def list_cmd(message: Message):
     if message.from_user.id != OWNER_ID:
         return
     chs = await get_channels(message.from_user.id)
-    text = "\n".join([f"{c} → {l}" for c, l in chs]) or "Список пуст"
-    await message.answer(text)
+    if not chs:
+        await message.answer("Список пуст")
+    else:
+        text = "\n".join([f"@{c} → {l}" for c, l in chs])
+        await message.answer(text)
 
 @router.callback_query(F.data.startswith("open_chat:"))
 async def open_chat_cb(callback: CallbackQuery):
-    msg_id = int(callback.data.split(":")[1])
-    chat_link = await get_chat_link(callback.from_user.id, msg_id)
+    user_id = callback.from_user.id
+    msg_id = int(callback.data.split(":", 1)[1])
+    chat_link = await get_chat_link(user_id, msg_id)
     if chat_link:
         await callback.message.answer(f"Вот ссылка на чат: {chat_link}")
     await callback.answer()
