@@ -13,7 +13,7 @@ router = Router()
 @router.message(Command("start"))
 async def start_cmd(message: Message):
     await message.answer(
-        "👋 Я могу по команде <code>/memes</code> присылать топ-мемы за последние 24 ч из добавленных каналов.\n\n"
+        "👋 Привет! Я могу по команде <code>/memes</code> присылать самые залайканные посты за последние 24 ч из добавленных каналов.\n\n"
         "• Добавить канал:\n"
         "  <code>/add_channel имя_канала ссылка_на_чат</code>\n"
         "• Удалить канал:\n"
@@ -33,10 +33,10 @@ async def add_cmd(message: Message):
             "❗️ Использование:\n<code>/add_channel имя_канала ссылка_на_чат</code>",
             parse_mode="HTML"
         )
-    chan, link = parts[1].lstrip("@"), parts[2]
-    await add_channel(message.from_user.id, chan, link)
+    chan, chat_link = parts[1].lstrip("@"), parts[2]
+    await add_channel(message.from_user.id, chan, chat_link)
     await message.answer(
-        f"✅ Канал @{chan} добавлен → {link}",
+        f"✅ Канал @{chan} добавлен с чатом <code>{chat_link}</code>",
         parse_mode="HTML"
     )
 
@@ -52,16 +52,19 @@ async def remove_cmd(message: Message):
         )
     chan = parts[1].lstrip("@")
     await remove_channel(message.from_user.id, chan)
-    await message.answer(f"🗑 Канал @{chan} удалён", parse_mode="HTML")
+    await message.answer(
+        f"🗑 Канал @{chan} удалён",
+        parse_mode="HTML"
+    )
 
 @router.message(Command("list"))
 async def list_cmd(message: Message):
     if message.from_user.id != OWNER_ID:
         return
-    chs = await get_channels(message.from_user.id)
-    if not chs:
+    channels = await get_channels(message.from_user.id)
+    if not channels:
         return await message.answer("Список каналов пуст 📝")
-    text = "\n".join(f"@{c} → {l}" for c, l in chs)
+    text = "\n".join(f"@{c} → {l}" for c, l in channels)
     await message.answer(text, parse_mode="HTML")
 
 @router.message(Command("memes"))
@@ -69,25 +72,27 @@ async def memes_cmd(message: Message):
     if message.from_user.id != OWNER_ID:
         return
 
-    chans = await get_channels(message.from_user.id)
-    if not chans:
+    channels = await get_channels(message.from_user.id)
+    if not channels:
         return await message.answer("❗️ Ни одного канала не добавлено.")
 
     await message.answer("🔍 Ищу топ-мемы за последние 24 ч…")
-    for chan, chat_link in chans:
+
+    for chan, chat_link in channels:
+        # Выполняем парсинг в отдельном потоке
         best_any, best_orig = await asyncio.to_thread(get_top_posts, chan)
+
         if not best_any:
             await message.answer(f"@{chan}: за 24 ч постов не найдено.")
             continue
 
-        # Извлечь message_id из data-post
-        data_post = best_any["data-post"]  # e.g. "channel/12345"
+        # 1) Самый залайканный (best_any)
+        data_post = best_any["data-post"]            # вида "channelUsername/12345"
         msg_id = int(data_post.split("/", 1)[1])
-
         sent = await message.bot.forward_message(
-            message.from_user.id,
-            f"@{chan}",
-            msg_id
+            chat_id=message.from_user.id,
+            from_chat_id=f"@{chan}",
+            message_id=msg_id
         )
         kb = InlineKeyboardMarkup().add(
             InlineKeyboardButton("Перейти в чат", callback_data=f"open_chat:{sent.message_id}")
@@ -95,14 +100,14 @@ async def memes_cmd(message: Message):
         await message.bot.send_message(message.from_user.id, " ", reply_markup=kb)
         await map_message(message.from_user.id, sent.message_id, chat_link)
 
-        # Если это был пересыл и есть оригинал — тоже отправить
+        # 2) Если это был пересыл (есть метка forwarded) и есть оригинал — пересылаем оригинал
         if best_any.find("a", class_="tgme_widget_message_forwarded") and best_orig:
-            dp2 = best_orig["data-post"]
-            msg2 = int(dp2.split("/", 1)[1])
+            data2 = best_orig["data-post"]
+            orig_id = int(data2.split("/", 1)[1])
             sent2 = await message.bot.forward_message(
-                message.from_user.id,
-                f"@{chan}",
-                msg2
+                chat_id=message.from_user.id,
+                from_chat_id=f"@{chan}",
+                message_id=orig_id
             )
             kb2 = InlineKeyboardMarkup().add(
                 InlineKeyboardButton("Перейти в чат", callback_data=f"open_chat:{sent2.message_id}")
@@ -117,7 +122,6 @@ async def open_chat_cb(callback: CallbackQuery):
     link = await get_chat_link(user_id, msg_id)
     if link:
         await callback.message.answer(
-            f"🔗 Ссылка на чат: {link}",
-            parse_mode="HTML"
+            f"🔗 Вот ссылка на чат: {link}"
         )
     await callback.answer()
