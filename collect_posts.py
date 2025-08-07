@@ -1,46 +1,58 @@
+# collect_posts.py
+
+import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
-from pyrogram import Client
-from config import API_ID, API_HASH, BOT_TOKEN
 
-SESSION_NAME = "memes_collector"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)"
+}
 
-async def get_top_posts(channel_username: str):
+def parse_messages(channel_username: str):
+    url = f"https://t.me/s/{channel_username}"
+    r = requests.get(url, headers=HEADERS, timeout=10)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    items = soup.find_all("div", class_="tgme_widget_message_wrap")
+    posts = []
+
+    for item in items:
+        # Дата
+        time_tag = item.find("time")
+        if not time_tag or not time_tag.has_attr("datetime"):
+            continue
+        dt = datetime.fromisoformat(time_tag["datetime"])
+        # Считаем реакции (всегда один <button> на всё сообщение)
+        btn = item.find("button", class_="tgme_widget_message_reactions_button")
+        count = 0
+        if btn:
+            # внутри кнопки есть span с числом
+            span = btn.find("span", class_="tgme_widget_message_reactions_counter")
+            if span and span.text.isdigit():
+                count = int(span.text)
+        posts.append((dt, count, item))
+    return posts
+
+def get_top_posts(channel_username: str):
     """
-    Возвращает кортеж (best_any, best_original):
-    - best_any      — сообщение с наибольшим числом реакций за 24 ч (включая пересылы).
-    - best_original — лучшее сообщение, написанное в самом канале (не пересыл).
-    Оба могут быть None, если не найдено.
+    Возвращает два сообщения (best_any, best_orig) за последние 24 часа.
+    best_any — любое (включая пересылы),
+    best_orig — только собственные (когда нет пересылки в HTML нет “forward” метки).
+    Для простоты: считаем, что если в html нет <a class="tgme_widget_message_forwarded"> — это оригинал.
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    best_any = None
-    best_any_count = -1
-    best_orig = None
-    best_orig_count = -1
+    posts = parse_messages(channel_username)
+    best_any = best_orig = None
+    max_any = max_orig = -1
 
-    async with Client(
-        SESSION_NAME,
-        api_id=API_ID,
-        api_hash=API_HASH,
-        bot_token=BOT_TOKEN
-    ) as app:
-        async for msg in app.get_chat_history(channel_username, limit=200):
-            if msg.date < cutoff:
-                break
-
-            # Считаем "лайки" через реакции
-            count = 0
-            if msg.reactions:
-                for r in msg.reactions.recent_reactions:
-                    count += r.count
-
-            # Общий топ
-            if count > best_any_count:
-                best_any = msg
-                best_any_count = count
-
-            # Топ среди оригинальных (не-forwarded)
-            if not msg.forward_from_chat and count > best_orig_count:
-                best_orig = msg
-                best_orig_count = count
+    for dt, cnt, html in posts:
+        if dt.replace(tzinfo=timezone.utc) < cutoff:
+            continue
+        # общий топ
+        if cnt > max_any:
+            max_any, best_any = cnt, html
+        # топ оригинальных
+        if not html.find("a", class_="tgme_widget_message_forwarded") and cnt > max_orig:
+            max_orig, best_orig = cnt, html
 
     return best_any, best_orig
