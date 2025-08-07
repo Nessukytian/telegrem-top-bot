@@ -13,7 +13,7 @@ async def main():
     dp = Dispatcher()
     dp.include_router(router)
 
-    setup_scheduler(bot, OWNER_ID)
+    setup_scheduler(bot, OWNER_ID)  # Запускаем планировщик
 
     await dp.start_polling(bot)
 
