@@ -17,42 +17,37 @@ def parse_messages(channel_username: str):
     posts = []
 
     for item in items:
-        # Дата
         time_tag = item.find("time")
         if not time_tag or not time_tag.has_attr("datetime"):
             continue
-        dt = datetime.fromisoformat(time_tag["datetime"])
-        # Считаем реакции (всегда один <button> на всё сообщение)
+        dt = datetime.fromisoformat(time_tag["datetime"]).replace(tzinfo=timezone.utc)
+
         btn = item.find("button", class_="tgme_widget_message_reactions_button")
         count = 0
         if btn:
-            # внутри кнопки есть span с числом
             span = btn.find("span", class_="tgme_widget_message_reactions_counter")
             if span and span.text.isdigit():
                 count = int(span.text)
+
         posts.append((dt, count, item))
     return posts
 
 def get_top_posts(channel_username: str):
     """
-    Возвращает два сообщения (best_any, best_orig) за последние 24 часа.
-    best_any — любое (включая пересылы),
-    best_orig — только собственные (когда нет пересылки в HTML нет “forward” метки).
-    Для простоты: считаем, что если в html нет <a class="tgme_widget_message_forwarded"> — это оригинал.
+    Возвращает два bs4.Tag:
+      best_any  — самый залайканный (включая пересылы)
+      best_orig — самый залайканный оригинальный (без пересылок)
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    posts = parse_messages(channel_username)
-    best_any = best_orig = None
+    best_any, best_orig = None, None
     max_any = max_orig = -1
 
-    for dt, cnt, html in posts:
-        if dt.replace(tzinfo=timezone.utc) < cutoff:
+    for dt, cnt, html in parse_messages(channel_username):
+        if dt < cutoff:
             continue
-        # общий топ
         if cnt > max_any:
-            max_any, best_any = cnt, html
-        # топ оригинальных
+            best_any, max_any = html, cnt
         if not html.find("a", class_="tgme_widget_message_forwarded") and cnt > max_orig:
-            max_orig, best_orig = cnt, html
+            best_orig, max_orig = html, cnt
 
     return best_any, best_orig
