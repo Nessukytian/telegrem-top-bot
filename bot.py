@@ -4,7 +4,10 @@ from aiogram import Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from storage import add_channel, get_channels, remove_channel, map_message, get_chat_link
+
+# Импортируем новую функцию из collect_posts.py
 from collect_posts import get_top_posts
+
 from config import OWNER_ID
 
 router = Router()
@@ -80,7 +83,7 @@ async def memes_cmd(message: Message):
     await message.answer("🔍 Ищу топ-мемы за последние 24 ч…")
 
     for channel_username, chat_link in channels:
-        best_any, best_orig = await get_top_posts(channel_username)
+        best_any, best_orig = get_top_posts(channel_username)
 
         if not best_any:
             await message.answer(f"@{channel_username}: за 24 ч постов не найдено.")
@@ -89,8 +92,8 @@ async def memes_cmd(message: Message):
         # 1) Пересылаем лучший (любой)
         sent_any = await message.bot.forward_message(
             message.from_user.id,
-            best_any.chat.id,
-            best_any.message_id
+            int(channel_username) if channel_username.isdigit() else best_any.get('chat_id'),
+            best_any.get('message_id')
         )
         kb_any = InlineKeyboardMarkup().add(
             InlineKeyboardButton("Перейти в чат", callback_data=f"open_chat:{sent_any.message_id}")
@@ -99,11 +102,12 @@ async def memes_cmd(message: Message):
         await map_message(message.from_user.id, sent_any.message_id, chat_link)
 
         # 2) Если это был пересыл и есть оригинал — пересылаем его
-        if best_any.forward_from_chat and best_orig:
+        # У HTML-парсера проверяем признак forwarded в тегах
+        if best_any.find("a", class_="tgme_widget_message_forwarded") and best_orig:
             sent_orig = await message.bot.forward_message(
                 message.from_user.id,
-                best_orig.chat.id,
-                best_orig.message_id
+                int(channel_username) if channel_username.isdigit() else best_orig.get('chat_id'),
+                best_orig.get('message_id')
             )
             kb_orig = InlineKeyboardMarkup().add(
                 InlineKeyboardButton("Перейти в чат", callback_data=f"open_chat:{sent_orig.message_id}")
