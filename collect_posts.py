@@ -1,55 +1,35 @@
 # collect_posts.py
 
-import requests
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
+from pyrogram import Client
+from config import API_ID, API_HASH, STRING_SESSION
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)"
-}
+SESSION_NAME = "memes_collector"
 
-def parse_messages(channel_username: str):
-    url = f"https://t.me/s/{channel_username}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    items = soup.find_all("div", class_="tgme_widget_message_wrap")
-    posts = []
-
-    for item in items:
-        # время и дата
-        time_tag = item.find("time")
-        if not time_tag or not time_tag.has_attr("datetime"):
-            continue
-        dt = datetime.fromisoformat(time_tag["datetime"]).replace(tzinfo=timezone.utc)
-
-        # число реакций
-        count = 0
-        btn = item.find("button", class_="tgme_widget_message_reactions_button")
-        if btn:
-            span = btn.find("span", class_="tgme_widget_message_reactions_counter")
-            if span and span.text.isdigit():
-                count = int(span.text)
-
-        posts.append((dt, count, item))
-    return posts
-
-def get_top_posts(channel_username: str):
+async def get_top_posts(channel_username: str):
     """
-    Возвращает два bs4.Tag:
-      best_any  — самый залайканный (включая пересылы)
-      best_orig — самый залайканный оригинал (без метки forwarded)
+    Возвращает два объекта Message:
+      best_any  — топ по реакциям (включая пересылы)
+      best_orig — топ оригинальных сообщений
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     best_any = best_orig = None
-    max_any = max_orig = -1
+    cnt_any = cnt_orig = -1
 
-    for dt, cnt, html in parse_messages(channel_username):
-        if dt < cutoff:
-            continue
-        if cnt > max_any:
-            best_any, max_any = html, cnt
-        if not html.find("a", class_="tgme_widget_message_forwarded") and cnt > max_orig:
-            best_orig, max_orig = html, cnt
+    async with Client(
+        SESSION_NAME,
+        api_id=API_ID,
+        api_hash=API_HASH,
+        session_string=STRING_SESSION
+    ) as app:
+        async for msg in app.get_chat_history(channel_username, limit=200):
+            if msg.date < cutoff:
+                break
+            # сумма всех реакций
+            total = sum(r.count for r in (msg.reactions.recent_reactions or []))
+            if total > cnt_any:
+                best_any, cnt_any = msg, total
+            if not msg.forward_from_chat and total > cnt_orig:
+                best_orig, cnt_orig = msg, total
 
     return best_any, best_orig
