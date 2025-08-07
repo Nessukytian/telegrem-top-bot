@@ -17,13 +17,15 @@ def parse_messages(channel_username: str):
     posts = []
 
     for item in items:
+        # время и дата
         time_tag = item.find("time")
         if not time_tag or not time_tag.has_attr("datetime"):
             continue
         dt = datetime.fromisoformat(time_tag["datetime"]).replace(tzinfo=timezone.utc)
 
-        btn = item.find("button", class_="tgme_widget_message_reactions_button")
+        # число реакций
         count = 0
+        btn = item.find("button", class_="tgme_widget_message_reactions_button")
         if btn:
             span = btn.find("span", class_="tgme_widget_message_reactions_counter")
             if span and span.text.isdigit():
@@ -36,10 +38,10 @@ def get_top_posts(channel_username: str):
     """
     Возвращает два bs4.Tag:
       best_any  — самый залайканный (включая пересылы)
-      best_orig — самый залайканный оригинальный (без пересылок)
+      best_orig — самый залайканный оригинал (без метки forwarded)
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    best_any, best_orig = None, None
+    best_any = best_orig = None
     max_any = max_orig = -1
 
     for dt, cnt, html in parse_messages(channel_username):
