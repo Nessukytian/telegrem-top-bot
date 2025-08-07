@@ -108,8 +108,7 @@ async def memes_cmd(message: Message):
             kb_orig = InlineKeyboardMarkup().add(
                 InlineKeyboardButton("Перейти в чат", callback_data=f"open_chat:{sent_orig.message_id}")
             )
-            await message.bot.
-send_message(message.from_user.id, " ", reply_markup=kb_orig)
+            await message.bot.send_message(message.from_user.id, " ", reply_markup=kb_orig)
             await map_message(message.from_user.id, sent_orig.message_id, chat_link)
 
 @router.callback_query(F.data.startswith("open_chat:"))
