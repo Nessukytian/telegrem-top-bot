@@ -33,7 +33,7 @@ async def get_channels(user_id: int):
             "SELECT channel_username, chat_link FROM channels WHERE user_id = ?",
             (user_id,)
         ) as cursor:
-            return await cursor.fetchall()  # List of (username, link)
+            return await cursor.fetchall()
 
 async def remove_channel(user_id: int, channel_username: str):
     async with aiosqlite.connect(DB_FILE) as db:
